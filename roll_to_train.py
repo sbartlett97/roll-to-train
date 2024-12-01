@@ -18,6 +18,7 @@ class DnDTrainer:
         self.dc = dc
         self.intelligence_modifier = (intelligence - 10) // 2
         self._loss_history = []
+        self._modified_loss_history = []
 
     @staticmethod
     def roll_d20():
@@ -27,12 +28,12 @@ class DnDTrainer:
         roll = self.roll_d20()
         modified_roll = roll + self.intelligence_modifier
         print(f"Rolled a {roll} (Modified: {modified_roll})")
-
+        self._loss_history.append(loss.item())
         # Critical Fail: Roll a natural 1
         if roll == 1:
             print("Critical Fail! Large inverse loss applied!")
             loss = loss * -5.0
-            self._loss_history.append(loss.item())
+            self._modified_loss_history.append(loss.item())
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
             self.optimizer.step()
 
@@ -40,7 +41,7 @@ class DnDTrainer:
         elif roll == 20:
             print("Critical Success! Applying full loss.")
             loss.backward()
-            self._loss_history.append(loss.item())
+            self._modified_loss_history.append(loss.item())
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
             self.optimizer.step()
 
@@ -49,7 +50,7 @@ class DnDTrainer:
             scale = (modified_roll - self.dc) / 5.0  # Example scaling
             print(f"Success! Scaling loss by {scale:.2f}.")
             loss = loss * scale
-            self._loss_history.append(loss.item())
+            self._modified_loss_history.append(loss.item())
             loss.backward()
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
@@ -58,7 +59,7 @@ class DnDTrainer:
         else:
             print("Fail! Applying small inverse weight update.")
             loss = -0.01 * loss
-            self._loss_history.append(loss)
+            self._modified_loss_history.append(loss.item())
             loss.backward()  # Small negative weight update
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
@@ -88,6 +89,17 @@ class DnDTrainer:
                 if step >= steps:
                     break
             self.step_lr()
-        plt.plot(self._loss_history)
+        plt.figure(figsize=(10, 6))
+        plt.plot(self._loss_history, label='Loss Before Roll', color='blue', linestyle='--', marker='o')
+        plt.plot(self._modified_loss_history, label='Loss After Roll', color='green', linestyle='-', marker='x')
+
+        # Add labels, title, and legend
+        plt.xlabel('Training Steps')
+        plt.ylabel('Loss')
+        plt.title('Loss History with Gamified Updates')
+        plt.legend()
+
+        # Show grid and plot
+        plt.grid(True, linestyle='--', alpha=0.7)
         plt.savefig("roll_to_train_loss.png")
 
