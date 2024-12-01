@@ -103,17 +103,30 @@ class DnDTrainer:
                 avg_loss = total_loss / len(eval_dataloader)
                 self._eval_loss_history.append(avg_loss)
                 print(f"Evaluation Loss: {avg_loss:.4f}")
-        plt.figure(figsize=(10, 6))
-        plt.plot(self._loss_history, label='Loss Before Roll', color='blue', linestyle='--', marker='o')
-        plt.plot(self._modified_loss_history, label='Loss After Roll', color='green', linestyle='-', marker='x')
-        plt.plot(self._eval_loss_history, label='Validation Loss', color='red', linestyle='.', marker='x')
-        # Add labels, title, and legend
-        plt.xlabel('Training Steps')
-        plt.ylabel('Loss')
-        plt.title('Loss History with Gamified Updates')
-        plt.legend()
+        fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
 
-        # Show grid and plot
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.savefig("roll_to_train_loss.png")
+        # Loss Before Roll
+        axes[0].plot(self._loss_history, color='blue', linestyle='--', marker='o')
+        axes[0].set_title('Loss Before Roll')
+        axes[0].set_ylabel('Loss')
+        axes[0].grid(True, linestyle='--', alpha=0.7)
+
+        # Loss After Roll
+        axes[1].plot(self._modified_loss_history, color='green', linestyle='-', marker='x')
+        axes[1].set_title('Loss After Roll')
+        axes[1].set_ylabel('Loss')
+        axes[1].grid(True, linestyle='--', alpha=0.7)
+
+        # Eval Loss
+        steps_range = [i for i in range(0, steps+1, eval_steps)]
+        axes[2].plot(steps_range, self._eval_loss_history, color='red', linestyle='-', marker='s')
+        axes[2].set_title('Evaluation Loss')
+        axes[2].set_xlabel('Training Steps')
+        axes[2].set_ylabel('Loss')
+        axes[2].grid(True, linestyle='--', alpha=0.7)
+
+        # Save the figure
+        plt.tight_layout()
+        plt.savefig("roll_to_train_loss_subplots.png")
+        print("Saved loss plots as 'roll_to_train_loss_subplots.png'")
 
