@@ -19,6 +19,7 @@ class DnDTrainer:
         self.intelligence_modifier = (intelligence - 10) // 2
         self._loss_history = []
         self._modified_loss_history = []
+        self._eval_loss_history = []
 
     @staticmethod
     def roll_d20():
@@ -31,8 +32,8 @@ class DnDTrainer:
         self._loss_history.append(loss.item())
         # Critical Fail: Roll a natural 1
         if roll == 1:
-            print("Critical Fail! Large inverse loss applied!")
-            loss = loss * -5.0
+            print("Critical Fail! Large scaled loss applied!")
+            loss = loss * 5.0
             self._modified_loss_history.append(loss.item())
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
             self.optimizer.step()
@@ -47,7 +48,7 @@ class DnDTrainer:
 
         # Success: Roll > DC
         elif modified_roll > self.dc:
-            scale = (modified_roll - self.dc) / 5.0  # Example scaling
+            scale = 1 / (modified_roll - self.dc)  # Example scaling
             print(f"Success! Scaling loss by {scale:.2f}.")
             loss = loss * scale
             self._modified_loss_history.append(loss.item())
@@ -57,12 +58,10 @@ class DnDTrainer:
 
         # Fail: Roll <= DC
         else:
-            print("Fail! Applying small inverse weight update.")
-            loss = -0.01 * loss
-            self._modified_loss_history.append(loss.item())
-            loss.backward()  # Small negative weight update
-            clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.optimizer.step()
+            print("Fail! No update applied")
+            self._modified_loss_history.append(0.0)
+            self.optimizer.zero_grad()
+            return
 
         # Clear gradients after update
         self.optimizer.zero_grad()
@@ -71,7 +70,7 @@ class DnDTrainer:
         self.lr_scheduler.step()
 
     # Example training loop
-    def train(self, dataloader, steps=3):
+    def train(self, dataloader, eval_dataloader, steps=3, eval_steps=100):
 
         step = 0
         self.model.train()
@@ -89,10 +88,25 @@ class DnDTrainer:
                 if step >= steps:
                     break
             self.step_lr()
+            if step  % eval_steps == 0:
+                self.model.eval()
+                total_loss = 0
+                with torch.no_grad():
+                    for batch in eval_dataloader:
+                        inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt",
+                                                max_length=256).to(device)
+                        labels = torch.tensor(batch["label"]).to(device)
+
+                        outputs = self.model(**inputs, labels=labels)
+                        total_loss += outputs.loss.item()
+
+                avg_loss = total_loss / len(eval_dataloader)
+                self._eval_loss_history.append(avg_loss)
+                print(f"Evaluation Loss: {avg_loss:.4f}")
         plt.figure(figsize=(10, 6))
         plt.plot(self._loss_history, label='Loss Before Roll', color='blue', linestyle='--', marker='o')
         plt.plot(self._modified_loss_history, label='Loss After Roll', color='green', linestyle='-', marker='x')
-
+        plt.plot(self._eval_loss_history, label='Validation Loss', color='red', linestyle='.', marker='x')
         # Add labels, title, and legend
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
