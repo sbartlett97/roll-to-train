@@ -67,7 +67,7 @@ class DnDTrainer:
         while step <= steps:
             for batch in dataloader:
                 print(f"Step {step + 1}")
-                inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt", max_lenght=256).to(device)
+                inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt", max_length=256).to(device)
                 labels = torch.tensor(batch["label"]).to(device)
 
                 outputs = self.model(**inputs, labels=labels)

@@ -6,9 +6,8 @@ from roll_to_train import DnDTrainer
 from datasets import load_dataset
 
 def main(intelligence=15, dc=12, dataset=None):
-    # Model and dataset setup (example)
     model_name = "bert-base-uncased"
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     dataset = load_dataset("zeroshot/twitter-financial-news-sentiment", streaming=True, split="train")
 
