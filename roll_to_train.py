@@ -69,13 +69,14 @@ class DnDTrainer:
         # Perform optimizer step and clear gradients after `accumulation_steps`
         if (self._grad_accum_counter >= self.accumulation_steps) or (step == steps-1):
             print("Performing optimizer step after gradient accumulation")
-
+            step+=1
             self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
             self.optimizer.step()
             self.optimizer.zero_grad()
             self._accumulated_loss = 0
             self._grad_accum_counter = 0  # Reset the counter
+        return step
 
     def step_lr(self):
         self.lr_scheduler.step()
@@ -95,8 +96,7 @@ class DnDTrainer:
                 outputs = self.model(**inputs, labels=labels)
                 loss = outputs.loss
 
-                self.weight_update(loss, step, steps)
-                step += 1
+                step = self.weight_update(loss, step, steps)
                 if step >= steps:
                     break
 
