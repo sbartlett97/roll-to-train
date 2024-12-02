@@ -14,37 +14,39 @@ class DnDTrainer:
         self.tokenizer = tokenizer
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.accumulation_steps = 64  # Number of accumulation steps
         self.intelligence = intelligence
         self.dc = dc
         self.intelligence_modifier = (intelligence - 10) // 2
         self._loss_history = []
         self._modified_loss_history = []
         self._eval_loss_history = []
+        self._grad_accum_counter = 0  # Track accumulated gradients
+        self._accumulated_loss = 0
+
 
     @staticmethod
     def roll_d20():
         return torch.randint(1, 21, (1,)).item()
 
-    def weight_update(self, loss):
+    def weight_update(self, loss, step, steps):
         roll = self.roll_d20()
         modified_roll = roll + self.intelligence_modifier
         print(f"Rolled a {roll} (Modified: {modified_roll})")
-        self._loss_history.append(loss.item())
+        self._accumulated_loss += loss.item()
+
         # Critical Fail: Roll a natural 1
         if roll == 1:
             print("Critical Fail! Large scaled loss applied!")
             loss = loss * 5.0
             self._modified_loss_history.append(loss.item())
-            clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
-            self.optimizer.step()
+            loss.backward()
 
         # Critical Success: Roll a natural 20
         elif roll == 20:
             print("Critical Success! Applying full loss.")
             loss.backward()
             self._modified_loss_history.append(loss.item())
-            clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
-            self.optimizer.step()
 
         # Success: Roll > DC
         elif modified_roll > self.dc:
@@ -53,18 +55,27 @@ class DnDTrainer:
             loss = loss * scale
             self._modified_loss_history.append(loss.item())
             loss.backward()
-            clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.optimizer.step()
 
         # Fail: Roll <= DC
         else:
             print("Fail! No update applied")
             self._modified_loss_history.append(0.0)
-            self.optimizer.zero_grad()
+            self._grad_accum_counter += 1  # Still count for accumulation
             return
 
-        # Clear gradients after update
-        self.optimizer.zero_grad()
+        # Increment the gradient accumulation counter
+        self._grad_accum_counter += 1
+
+        # Perform optimizer step and clear gradients after `accumulation_steps`
+        if (self._grad_accum_counter >= self.accumulation_steps) or (step == steps-1):
+            print("Performing optimizer step after gradient accumulation")
+
+            self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
+            clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+            self._accumulated_loss = 0
+            self._grad_accum_counter = 0  # Reset the counter
 
     def step_lr(self):
         self.lr_scheduler.step()
@@ -75,38 +86,41 @@ class DnDTrainer:
         step = 0
         self.model.train()
         while step < steps:
+            self.model.train()
             for batch in dataloader:
                 print(f"Step {step + 1}")
-                inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt", max_length=256).to(device)
+                inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt", max_length=512).to(device)
                 labels = torch.tensor(batch["label"]).to(device)
 
                 outputs = self.model(**inputs, labels=labels)
                 loss = outputs.loss
 
-                self.weight_update(loss)
+                self.weight_update(loss, step, steps)
                 step += 1
                 if step >= steps:
                     break
-            self.step_lr()
-            if step  % eval_steps == 0:
-                self.model.eval()
-                total_loss = 0
-                with torch.no_grad():
-                    for batch in eval_dataloader:
-                        inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt",
-                                                max_length=256).to(device)
-                        labels = torch.tensor(batch["label"]).to(device)
 
-                        outputs = self.model(**inputs, labels=labels)
-                        total_loss += outputs.loss.item()
+                if step  % eval_steps == 0:
+                    self.model.eval()
+                    total_loss = 0
+                    with torch.no_grad():
+                        for batch in eval_dataloader:
+                            inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt",
+                                                    max_length=512).to(device)
+                            labels = torch.tensor(batch["label"]).to(device)
 
-                avg_loss = total_loss / len(eval_dataloader)
-                self._eval_loss_history.append(avg_loss)
-                print(f"Evaluation Loss: {avg_loss:.4f}")
-        fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
+                            outputs = self.model(**inputs, labels=labels)
+                            total_loss += outputs.loss.item()
+
+                    avg_loss = total_loss / len(eval_dataloader)
+                    self._eval_loss_history.append(avg_loss)
+                    print(f"Evaluation Loss: {avg_loss:.4f}")
+                self.step_lr()
+        fig, axes = plt.subplots(3, 1, figsize=(20, 30), sharex=True)
 
         # Loss Before Roll
-        axes[0].plot(self._loss_history, color='blue', linestyle='--', marker='o')
+        accumulation_range = [i for i in range(self.accumulation_steps, steps-1, self.accumulation_steps)]
+        axes[0].plot(accumulation_range, self._loss_history, color='blue', linestyle='--', marker='o')
         axes[0].set_title('Loss Before Roll')
         axes[0].set_ylabel('Loss')
         axes[0].grid(True, linestyle='--', alpha=0.7)
@@ -118,7 +132,7 @@ class DnDTrainer:
         axes[1].grid(True, linestyle='--', alpha=0.7)
 
         # Eval Loss
-        steps_range = [i for i in range(0, steps+1, eval_steps)]
+        steps_range = [i for i in range(eval_steps, steps, eval_steps)]
         axes[2].plot(steps_range, self._eval_loss_history, color='red', linestyle='-', marker='s')
         axes[2].set_title('Evaluation Loss')
         axes[2].set_xlabel('Training Steps')
