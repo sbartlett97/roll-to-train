@@ -25,30 +25,31 @@ class DnDTrainer:
         self._accumulated_loss = 0
         self._mode = "per_mini_batch"
 
+    def get_scale_factor(self, roll):
+        if roll == 1:
+            print("Critical Fail! Inverse loss applied!")
+            scale = -1.0
+        elif roll == 20:
+            print("Critical Success! Applying full loss.")
+            scale = 1.0
+        elif roll >= self.dc:
+            scale = 1 * ((roll - self.dc) / 100)
+            print(f"Success! Scaling loss by {scale:.2f}.")
+        else:
+            print("Fail! No update applied")
+            scale = 0
+        return scale
 
-    @staticmethod
-    def roll_d20():
-        return torch.randint(1, 21, (1,)).item()
+    def roll_d20(self):
+        return torch.randint(1, 21, (1,)).item() + self.intelligence_modifier
 
     def weight_update(self, loss, step, steps):
-        roll = self.roll_d20()
-        modified_roll = roll + self.intelligence_modifier
-        print(f"Rolled a {roll} (Modified: {modified_roll})")
-
         if self._mode == 'per_mini_batch':
+            roll = self.roll_d20()
 
-            if roll == 1:
-                print("Critical Fail! Inverse loss applied!")
-                scale = -1.0
-            elif roll == 20:
-                print("Critical Success! Applying full loss.")
-                scale = 1.0
-            elif roll >= self.dc:
-                scale = 1 * ((modified_roll - self.dc)/100)
-                print(f"Success! Scaling loss by {scale:.2f}.")
-            else:
-                print("Fail! No update applied")
-                scale = 0
+            print(f"Rolled a {roll} (Modified: {roll})")
+
+            scale = self.get_scale_factor(roll)
 
             loss = loss * scale
             self._modified_loss_history.append(loss.item())
@@ -62,6 +63,12 @@ class DnDTrainer:
             print("Performing optimizer step after gradient accumulation")
             step+=1
             self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
+            if self._mode == 'per_accumulation_step':
+                roll = self.roll_d20()
+                scale = self.get_scale_factor(roll)
+                for param in self.model.parameters:
+                    if param.grad is not None:
+                        param.grad.data *= scale
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)  # Optional grad clipping
             self.optimizer.step()
             self.optimizer.zero_grad()
