@@ -23,6 +23,7 @@ class DnDTrainer:
         self._eval_loss_history = []
         self._grad_accum_counter = 0  # Track accumulated gradients
         self._accumulated_loss = 0
+        self._mode = "per_mini_batch"
 
 
     @staticmethod
@@ -33,37 +34,27 @@ class DnDTrainer:
         roll = self.roll_d20()
         modified_roll = roll + self.intelligence_modifier
         print(f"Rolled a {roll} (Modified: {modified_roll})")
-        self._accumulated_loss += loss.item()
 
-        # Critical Fail: Roll a natural 1
-        if roll == 1:
-            print("Critical Fail! Large scaled loss applied!")
-            loss = loss * 5.0
-            self._modified_loss_history.append(loss.item())
-            loss.backward()
+        if self._mode == 'per_mini_batch':
 
-        # Critical Success: Roll a natural 20
-        elif roll == 20:
-            print("Critical Success! Applying full loss.")
-            loss.backward()
-            self._modified_loss_history.append(loss.item())
+            if roll == 1:
+                print("Critical Fail! Inverse loss applied!")
+                scale = -1.0
+            elif roll == 20:
+                print("Critical Success! Applying full loss.")
+                scale = 1.0
+            elif roll >= self.dc:
+                scale = 1 * ((modified_roll - self.dc)/100)
+                print(f"Success! Scaling loss by {scale:.2f}.")
+            else:
+                print("Fail! No update applied")
+                scale = 0
 
-        # Success: Roll > DC
-        elif modified_roll > self.dc:
-            scale = 1 / (modified_roll - self.dc)  # Example scaling
-            print(f"Success! Scaling loss by {scale:.2f}.")
             loss = loss * scale
             self._modified_loss_history.append(loss.item())
             loss.backward()
 
-        # Fail: Roll <= DC
-        else:
-            print("Fail! No update applied")
-            self._modified_loss_history.append(0.0)
-            self._grad_accum_counter += 1  # Still count for accumulation
-            return
-
-        # Increment the gradient accumulation counter
+        self._accumulated_loss += loss.item()
         self._grad_accum_counter += 1
 
         # Perform optimizer step and clear gradients after `accumulation_steps`
