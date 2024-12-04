@@ -48,6 +48,7 @@ class DnDTrainer:
             scale = 1 * ((roll - self.dc) / 100)
             print(f"Success! Scaling loss by {scale:.2f}.")
         else:
+            scale = 0.0
             print("Fail! No update applied")
         return scale
 
@@ -57,9 +58,10 @@ class DnDTrainer:
         roll = self.roll_d20()
         scale = self.get_scale_factor(roll)
 
-        with autocast():  # Mixed precision context
-            loss = loss * scale
-            self._modified_loss_history.append(loss.item())
+        with autocast():
+            if self._mode == 'per_mini_batch':
+                loss = loss * scale
+                self._modified_loss_history.append(loss.item())
             self.scaler.scale(loss).backward()
 
         self._accumulated_loss += loss.item()
@@ -68,8 +70,10 @@ class DnDTrainer:
         if self._grad_accum_counter >= self.accumulation_steps:
             print("Performing optimizer step after gradient accumulation")
             self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
-
-            # Optional gradient clipping
+            if self._mode == 'per_accumulation_step':
+                for param in self.model.parameters():
+                    if param.grad is not None:
+                        param.grad.mul_(scale)
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
             self.scaler.step(self.optimizer)
