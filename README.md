@@ -8,6 +8,8 @@ The potential benefits include increased robustness, creative exploration of opt
 
 This repo is in active development, and I am welcome to suggestions and contributions to take this even further!
 
+see the CONTRIBUTING.md file.
+
 ---
 
 ### **Methodology**
@@ -33,3 +35,25 @@ stored weight updates for each parameter are scaled in the same way.
 1. **Robustness Testing**: Introducing randomness into weight updates can test a model's resilience to suboptimal optimization.
 2. **Educational Tool**: The gamified mechanics offer an engaging way to teach machine learning concepts.
 3. **Exploration of Loss Landscapes**: By breaking deterministic patterns, this approach could lead to unexpected paths through the optimization space.
+
+
+### References
+
+@article{DBLP:journals/corr/abs-1810-04805,
+  author    = {Jacob Devlin and
+               Ming{-}Wei Chang and
+               Kenton Lee and
+               Kristina Toutanova},
+  title     = {{BERT:} Pre-training of Deep Bidirectional Transformers for Language
+               Understanding},
+  journal   = {CoRR},
+  volume    = {abs/1810.04805},
+  year      = {2018},
+  url       = {http://arxiv.org/abs/1810.04805},
+  archivePrefix = {arXiv},
+  eprint    = {1810.04805},
+  timestamp = {Tue, 30 Oct 2018 20:39:56 +0100},
+  biburl    = {https://dblp.org/rec/journals/corr/abs-1810-04805.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
