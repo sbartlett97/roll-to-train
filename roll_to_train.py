@@ -78,6 +78,8 @@ class RollToTrain:
                 for param in self.model.parameters():
                     if param.grad is not None:
                         param.grad.mul_(scale)
+
+                self._modified_loss_history.append((self._accumulated_loss / self.accumulation_steps)*scale)
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
             self.scaler.step(self.optimizer)
@@ -143,7 +145,7 @@ class RollToTrain:
         axes[0].grid(True, linestyle='--', alpha=0.7)
 
         # Loss After Roll
-        modified_loss_steps = [i for i in range(steps)] if self._mode == "per_mini_batch" else [i for i in range(0, steps,
+        modified_loss_steps = [i for i in range(steps*self.epochs)] if self._mode == "per_mini_batch" else [i for i in range(0, steps*self.epochs,
                                                                                                         self.accumulation_steps)]
         axes[1].plot(modified_loss_steps, self._modified_loss_history, color='green', linestyle='-', marker='x')
         axes[1].set_title('Loss After Roll')
