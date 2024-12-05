@@ -1,9 +1,10 @@
 import torch
+
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from roll_to_train import DnDTrainer
 from datasets import load_dataset
+from roll_to_train import DnDTrainer
 
 def main(intelligence=15, dc=12.0, dataset=None):
     model_name = "bert-base-uncased"
@@ -18,10 +19,9 @@ def main(intelligence=15, dc=12.0, dataset=None):
 
     trainer = DnDTrainer(model, tokenizer, optimizer, scheduler, intelligence, float(dc))
     trainer.train(dataloader, val_dataloader, steps=len(dataloader), eval_steps=100)
-    trainer = DnDTrainer(model, tokenizer, optimizer, scheduler, intelligence, float(dc), mode="per_accumulation_step")
+    trainer = DnDTrainer(model, tokenizer, optimizer, scheduler, intelligence, float(dc),
+                         mode="per_accumulation_step")
     trainer.train(dataloader, val_dataloader, steps=len(dataloader), eval_steps=100)
-
-
 
 
 if __name__=="__main__":
