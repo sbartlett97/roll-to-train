@@ -12,10 +12,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # D&D Trainer Class
-class DnDTrainer:
+class RollToTrain:
     """Main trainer class"""
     def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15,
-                 accumulation_steps=64, mode="per_mini_batch"):
+                 accumulation_steps=64, mode="per_mini_batch", num_epochs=3):
         self.model = model.to(device)
         self.tokenizer = tokenizer
         self.optimizer = optimizer
@@ -33,8 +33,8 @@ class DnDTrainer:
         self._grad_accum_counter = 0
         self._accumulated_loss = 0
         self._mode = mode
-        self.step = 0
-        self.steps = 0
+        self.epoch = 0
+        self.epochs = num_epochs
 
     def roll_d20(self):
         """Roll a D20 dice on the GPU."""
@@ -71,7 +71,6 @@ class DnDTrainer:
 
         self._accumulated_loss += loss.item()
 
-        # Perform optimization step after accumulation
         if self._grad_accum_counter >= self.accumulation_steps:
             print("Performing optimizer step after gradient accumulation")
             self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
@@ -88,17 +87,16 @@ class DnDTrainer:
             self._accumulated_loss = 0
             self._grad_accum_counter = 0
 
-    def train(self, train_dataloader, eval_dataloader, steps=3, eval_steps=100):
+    def train(self, train_dataloader, eval_dataloader):
         """Train the model for a specified number of steps."""
-        self.steps = steps
-        self.step = 0
+        self.epoch = 0
 
-        while self.step < self.steps:
+        while self.epoch < self.epochs:
             for batch_idx, batch in enumerate(train_dataloader):
                 if self.model.eval:
                     self.model.train()
 
-                print(f"Step {self.step + 1}, Batch {batch_idx + 1}")
+                print(f"Step {self.epoch + 1}, Batch {batch_idx + 1}")
                 inputs = self.tokenizer(batch["text"], padding=True, truncation=True,
                                         return_tensors="pt", max_length=512).to(device)
                 labels = batch["label"].to(device)
@@ -109,13 +107,13 @@ class DnDTrainer:
 
                 self.weight_update(loss)
 
-                if self.step >= self.steps:
+                if self.epoch >= self.epochs:
                     break
 
-                if (self.step + 1) % eval_steps == 0:
-                    self.evaluate(eval_dataloader)
-
+            self.evaluate(eval_dataloader)
             self.lr_scheduler.step()
+            self.epoch += 1
+        self.plot_loss(len(train_dataloader))
 
     def evaluate(self, eval_dataloader):
         """Evaluate the model on the validation set."""
@@ -134,7 +132,7 @@ class DnDTrainer:
         self._eval_loss_history.append(avg_loss)
         print(f"Evaluation Loss: {avg_loss:.4f}")
 
-    def plot_loss(self):
+    def plot_loss(self, steps):
         """Plot and save the training and evaluation loss."""
         fig, axes = plt.subplots(3, 1, figsize=(10, 20), sharex=True)
 
@@ -145,13 +143,16 @@ class DnDTrainer:
         axes[0].grid(True, linestyle='--', alpha=0.7)
 
         # Loss After Roll
-        axes[1].plot(self._modified_loss_history, color='green', linestyle='-', marker='x')
+        modified_loss_steps = [i for i in range(steps)] if self._mode == "per_mini_batch" else [i for i in range(0, steps,
+                                                                                                        self.accumulation_steps)]
+        axes[1].plot(modified_loss_steps, self._modified_loss_history, color='green', linestyle='-', marker='x')
         axes[1].set_title('Loss After Roll')
         axes[1].set_ylabel('Loss')
         axes[1].grid(True, linestyle='--', alpha=0.7)
 
         # Evaluation Loss
-        axes[2].plot(self._eval_loss_history, color='red', linestyle='-', marker='s')
+        eval_steps = [i for i in range(0, steps*self.epochs, steps)]
+        axes[2].plot(eval_steps, self._eval_loss_history, color='red', linestyle='-', marker='s')
         axes[2].set_title('Evaluation Loss')
         axes[2].set_xlabel('Training Steps')
         axes[2].set_ylabel('Loss')
@@ -159,5 +160,5 @@ class DnDTrainer:
 
         # Save the figure
         plt.tight_layout()
-        plt.savefig("roll_to_train_loss_subplots.png")
-        print("Saved loss plots as 'roll_to_train_loss_subplots.png'")
+        plt.savefig(f"{self._mode}_roll_to_train_loss_subplots.png")
+        print(f"Saved loss plots as '{self._mode}_roll_to_train_loss_subplots.png'")
