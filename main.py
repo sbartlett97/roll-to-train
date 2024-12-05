@@ -18,10 +18,10 @@ def main(intelligence=15, dc=12.0, dataset=None):
     optimizer = AdamW(model.parameters(), lr=5e-5)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
 
-    trainer = RollToTrain(model, tokenizer, optimizer, scheduler, intelligence, float(dc))
+    trainer = RollToTrain(model, tokenizer, optimizer, scheduler, intelligence, float(dc), num_epochs=1)
     trainer.train(dataloader, val_dataloader)
     trainer = RollToTrain(model, tokenizer, optimizer, scheduler, intelligence, float(dc),
-                         mode="per_accumulation_step")
+                         mode="per_accumulation_step", num_epochs=1)
     trainer.train(dataloader, val_dataloader)
 
 
