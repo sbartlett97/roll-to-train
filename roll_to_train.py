@@ -1,8 +1,11 @@
+"""roll-to-train is an experimental machine learning training
+approach that introduces randomness to the training process on weight updates
+using dice-roll mechanics from TTRPGs like Dungeons & Dragons."""
+
 import torch
 from torch.nn.utils import clip_grad_norm_
 from torch.cuda.amp import GradScaler, autocast
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 # Device setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -10,7 +13,9 @@ print(f"Using device: {device}")
 
 # D&D Trainer Class
 class DnDTrainer:
-    def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15, accumulation_steps=64, mode="per_mini_batch"):
+    """Main trainer class"""
+    def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15,
+                 accumulation_steps=64, mode="per_mini_batch"):
         self.model = model.to(device)
         self.tokenizer = tokenizer
         self.optimizer = optimizer
@@ -94,8 +99,8 @@ class DnDTrainer:
                     self.model.train()
 
                 print(f"Step {self.step + 1}, Batch {batch_idx + 1}")
-                inputs = self.tokenizer(batch["text"], padding=True, truncation=True, return_tensors="pt",
-                                        max_length=512).to(device)
+                inputs = self.tokenizer(batch["text"], padding=True, truncation=True,
+                                        return_tensors="pt", max_length=512).to(device)
                 labels = batch["label"].to(device)
 
                 with autocast():
@@ -118,8 +123,8 @@ class DnDTrainer:
         total_loss = 0
         with torch.no_grad():
             for val_batch in eval_dataloader:
-                inputs = self.tokenizer(val_batch["text"], padding=True, truncation=True, return_tensors="pt",
-                                        max_length=512).to(device)
+                inputs = self.tokenizer(val_batch["text"], padding=True, truncation=True,
+                                        return_tensors="pt", max_length=512).to(device)
                 labels = val_batch["label"].to(device)
 
                 outputs = self.model(**inputs, labels=labels)
