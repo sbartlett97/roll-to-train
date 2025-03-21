@@ -6,6 +6,7 @@ import torch
 from torch.nn.utils import clip_grad_norm_
 from torch.cuda.amp import GradScaler, autocast
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 # Device setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -16,6 +17,23 @@ class RollToTrain:
     """Main trainer class"""
     def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15,
                  accumulation_steps=64, mode="per_mini_batch", num_epochs=3):
+        if not isinstance(model, torch.nn.Module):
+            raise TypeError("model must be a PyTorch module")
+        if not isinstance(optimizer, torch.optim.Optimizer):
+            raise TypeError("optimizer must be a PyTorch optimizer")
+        if not isinstance(lr_scheduler, torch.optim.lr_scheduler._LRScheduler):
+            raise TypeError("lr_scheduler must be a PyTorch learning rate scheduler")
+        if not 1 <= intelligence <= 20:
+            raise ValueError("intelligence must be between 1 and 20")
+        if not 1 <= dc <= 30:
+            raise ValueError("dc must be between 1 and 30")
+        if accumulation_steps < 1:
+            raise ValueError("accumulation_steps must be positive")
+        if mode not in ["per_mini_batch", "per_accumulation_step"]:
+            raise ValueError("mode must be either 'per_mini_batch' or 'per_accumulation_step'")
+        if num_epochs < 1:
+            raise ValueError("num_epochs must be positive")
+
         self.model = model.to(device)
         self.tokenizer = tokenizer
         self.optimizer = optimizer
@@ -94,11 +112,13 @@ class RollToTrain:
         self.epoch = 0
 
         while self.epoch < self.epochs:
-            for batch_idx, batch in enumerate(train_dataloader):
+            print(f"\nEpoch {self.epoch + 1}/{self.epochs}")
+            progress_bar = tqdm(train_dataloader, desc="Training")
+            
+            for batch_idx, batch in enumerate(progress_bar):
                 if self.model.eval:
                     self.model.train()
 
-                print(f"Step {self.epoch + 1}, Batch {batch_idx + 1}")
                 inputs = self.tokenizer(batch["text"], padding=True, truncation=True,
                                         return_tensors="pt", max_length=512).to(device)
                 labels = batch["label"].to(device)
@@ -108,6 +128,12 @@ class RollToTrain:
                     loss = outputs.loss
 
                 self.weight_update(loss)
+                
+                # Update progress bar
+                progress_bar.set_postfix({
+                    'loss': f'{loss.item():.4f}',
+                    'lr': f'{self.optimizer.param_groups[0]["lr"]:.2e}'
+                })
 
                 if self.epoch >= self.epochs:
                     break
@@ -164,3 +190,37 @@ class RollToTrain:
         plt.tight_layout()
         plt.savefig(f"{self._mode}_roll_to_train_loss_subplots.png")
         print(f"Saved loss plots as '{self._mode}_roll_to_train_loss_subplots.png'")
+
+    def save_checkpoint(self, path):
+        """Save a checkpoint of the model and training state."""
+        checkpoint = {
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.lr_scheduler.state_dict(),
+            'scaler_state_dict': self.scaler.state_dict(),
+            'epoch': self.epoch,
+            'loss_history': self._loss_history,
+            'modified_loss_history': self._modified_loss_history,
+            'eval_loss_history': self._eval_loss_history,
+            'intelligence': self.intelligence,
+            'dc': self.dc,
+            'mode': self._mode
+        }
+        torch.save(checkpoint, path)
+        print(f"Saved checkpoint to {path}")
+
+    def load_checkpoint(self, path):
+        """Load a checkpoint of the model and training state."""
+        checkpoint = torch.load(path)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        self.epoch = checkpoint['epoch']
+        self._loss_history = checkpoint['loss_history']
+        self._modified_loss_history = checkpoint['modified_loss_history']
+        self._eval_loss_history = checkpoint['eval_loss_history']
+        self.intelligence = checkpoint['intelligence']
+        self.dc = checkpoint['dc']
+        self._mode = checkpoint['mode']
+        print(f"Loaded checkpoint from {path}")
