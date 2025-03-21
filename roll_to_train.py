@@ -76,13 +76,106 @@ class ExperienceSystem:
         """Get training bonus based on level"""
         return 0.1 * (self.level - 1)  # 10% bonus per level
 
+class Monster:
+    """Base class for training monsters"""
+    def __init__(self, name, difficulty_class, hp, abilities=None):
+        self.name = name
+        self.dc = difficulty_class
+        self.hp = hp
+        self.abilities = abilities or []
+        self.current_hp = hp
+
+    def apply_effect(self, loss, roll):
+        """Apply monster's effect to the training process"""
+        return loss
+
+class GradientOoze(Monster):
+    """A monster that slows down gradient updates"""
+    def __init__(self):
+        super().__init__("Gradient Ooze", dc=12, hp=3)
+        self.abilities = ["Slime Trail"]
+
+    def apply_effect(self, loss, roll):
+        if roll < self.dc:
+            print("Gradient Ooze's Slime Trail is slowing down your updates!")
+            return loss * 0.5  # Reduce learning rate temporarily
+        return loss
+
+class LossDragon(Monster):
+    """A monster that increases loss values"""
+    def __init__(self):
+        super().__init__("Loss Dragon", dc=15, hp=5)
+        self.abilities = ["Loss Breath"]
+
+    def apply_effect(self, loss, roll):
+        if roll < self.dc:
+            print("Loss Dragon's breath is increasing your loss!")
+            return loss * 2.0  # Double the loss temporarily
+        return loss
+
+class WeightWraith(Monster):
+    """A monster that affects model weights"""
+    def __init__(self):
+        super().__init__("Weight Wraith", dc=14, hp=4)
+        self.abilities = ["Weight Drain"]
+
+    def apply_effect(self, loss, roll):
+        if roll < self.dc:
+            print("Weight Wraith is draining your model's strength!")
+            return loss * 1.5  # Increase loss and affect weight updates
+        return loss
+
+class MonsterEncounter:
+    """Manages monster encounters during training"""
+    def __init__(self, encounter_chance=0.1):
+        self.encounter_chance = encounter_chance
+        self.monsters = [
+            GradientOoze(),
+            LossDragon(),
+            WeightWraith()
+        ]
+        self.active_monster = None
+        self.encounter_steps = 0
+        self.max_encounter_steps = 3  # Monster stays for 3 steps
+
+    def roll_encounter(self):
+        """Determine if a monster encounter should occur"""
+        return torch.rand(1).item() < self.encounter_chance
+
+    def get_random_monster(self):
+        """Get a random monster for the encounter"""
+        return self.monsters[torch.randint(0, len(self.monsters), (1,)).item()]
+
+    def start_encounter(self):
+        """Start a new monster encounter"""
+        if self.active_monster is None and self.roll_encounter():
+            self.active_monster = self.get_random_monster()
+            self.encounter_steps = 0
+            print(f"\nA {self.active_monster.name} appears!")
+            return True
+        return False
+
+    def update_encounter(self, loss, roll):
+        """Update the current monster encounter"""
+        if self.active_monster is not None:
+            self.encounter_steps += 1
+            loss = self.active_monster.apply_effect(loss, roll)
+            
+            if self.encounter_steps >= self.max_encounter_steps:
+                print(f"\nThe {self.active_monster.name} retreats!")
+                self.active_monster = None
+                self.encounter_steps = 0
+            
+            return loss
+        return loss
+
 # D&D Trainer Class
 class RollToTrain:
     """Main trainer class"""
     def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15,
                  accumulation_steps=64, mode="per_mini_batch", num_epochs=3,
                  dice_type="d20", advantage=False, disadvantage=False,
-                 character_class=None, use_xp_system=True):
+                 character_class=None, use_xp_system=True, encounter_chance=0.1):
         if not isinstance(model, torch.nn.Module):
             raise TypeError("model must be a PyTorch module")
         if not isinstance(optimizer, torch.optim.Optimizer):
@@ -131,6 +224,7 @@ class RollToTrain:
         self.use_xp_system = use_xp_system
         if use_xp_system:
             self.xp_system = ExperienceSystem()
+        self.monster_encounter = MonsterEncounter(encounter_chance)
 
     def roll_dice(self):
         """Roll dice with optional advantage/disadvantage."""
@@ -173,14 +267,24 @@ class RollToTrain:
         with autocast():
             if self._mode == 'per_mini_batch':
                 loss = loss * scale
+                
+                # Handle monster encounters
+                if self._grad_accum_counter % self.accumulation_steps == 0:
+                    self.monster_encounter.start_encounter()
+                loss = self.monster_encounter.update_encounter(loss, roll)
+                
                 if self.character_class:
                     loss = self.character_class.apply_ability(loss, roll)
                 if self.use_xp_system:
                     level_bonus = self.xp_system.get_level_bonus()
                     loss = loss * (1 + level_bonus)
-                    # Award XP based on roll success
+                    # Award XP based on roll success and monster encounters
                     if roll >= self.dc:
-                        self.xp_system.add_xp(int(roll * 10))
+                        xp_gain = int(roll * 10)
+                        if self.monster_encounter.active_monster:
+                            xp_gain *= 2  # Double XP for monster encounters
+                        self.xp_system.add_xp(xp_gain)
+                
                 self._modified_loss_history.append(loss.item())
             self.scaler.scale(loss).backward()
 
@@ -308,7 +412,12 @@ class RollToTrain:
             'dice_sides': self.dice_sides,
             'character_class': self.character_class.__class__.__name__ if self.character_class else None,
             'use_xp_system': self.use_xp_system,
-            'xp_system': self.xp_system.__dict__ if self.use_xp_system else None
+            'xp_system': self.xp_system.__dict__ if self.use_xp_system else None,
+            'monster_encounter': {
+                'encounter_chance': self.monster_encounter.encounter_chance,
+                'active_monster': self.monster_encounter.active_monster.__class__.__name__ if self.monster_encounter.active_monster else None,
+                'encounter_steps': self.monster_encounter.encounter_steps
+            }
         }
         torch.save(checkpoint, path)
         print(f"Saved checkpoint to {path}")
@@ -335,4 +444,10 @@ class RollToTrain:
         if self.use_xp_system:
             self.xp_system = ExperienceSystem()
             self.xp_system.__dict__.update(checkpoint['xp_system'])
+        monster_data = checkpoint.get('monster_encounter', {})
+        self.monster_encounter.encounter_chance = monster_data.get('encounter_chance', 0.1)
+        if monster_data.get('active_monster'):
+            monster_class = globals()[monster_data['active_monster']]
+            self.monster_encounter.active_monster = monster_class()
+            self.monster_encounter.encounter_steps = monster_data.get('encounter_steps', 0)
         print(f"Loaded checkpoint from {path}")

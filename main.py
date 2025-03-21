@@ -37,6 +37,8 @@ def parse_args():
                       help='Character class to use')
     parser.add_argument('--use_xp_system', action='store_true',
                       help='Enable experience points and leveling system')
+    parser.add_argument('--encounter_chance', type=float, default=0.1,
+                      help='Chance of encountering a monster during training')
     return parser.parse_args()
 
 def get_character_class(class_name, level=1):
@@ -90,7 +92,8 @@ def main():
             advantage=args.advantage,
             disadvantage=args.disadvantage,
             character_class=character_class,
-            use_xp_system=args.use_xp_system
+            use_xp_system=args.use_xp_system,
+            encounter_chance=args.encounter_chance
         )
         trainer.train(dataloader, val_dataloader)
         trainer.save_checkpoint(checkpoint_dir / "per_mini_batch_checkpoint.pt")
@@ -111,7 +114,8 @@ def main():
             advantage=args.advantage,
             disadvantage=args.disadvantage,
             character_class=character_class,
-            use_xp_system=args.use_xp_system
+            use_xp_system=args.use_xp_system,
+            encounter_chance=args.encounter_chance
         )
         trainer.train(dataloader, val_dataloader)
         trainer.save_checkpoint(checkpoint_dir / "per_accumulation_step_checkpoint.pt")
