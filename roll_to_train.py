@@ -12,11 +12,77 @@ from tqdm import tqdm
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
+class CharacterClass:
+    """Base class for character classes"""
+    def __init__(self, name, level=1):
+        self.name = name
+        self.level = level
+        self.abilities = []
+
+    def apply_ability(self, loss, roll):
+        """Apply class-specific abilities to the training process"""
+        return loss
+
+class Wizard(CharacterClass):
+    """Wizard class - specializes in learning rate manipulation"""
+    def __init__(self, level=1):
+        super().__init__("Wizard", level)
+        self.abilities = ["Arcane Recovery", "Spell Mastery"]
+        self.arcane_recovery_charges = 3
+
+    def apply_ability(self, loss, roll):
+        if roll >= 15 and self.arcane_recovery_charges > 0:
+            print("Arcane Recovery! Adjusting learning rate...")
+            self.arcane_recovery_charges -= 1
+            return loss * 1.5  # Increase learning rate temporarily
+        return loss
+
+class Rogue(CharacterClass):
+    """Rogue class - specializes in gradient manipulation"""
+    def __init__(self, level=1):
+        super().__init__("Rogue", level)
+        self.abilities = ["Sneak Attack", "Cunning Action"]
+        self.sneak_attack_dice = 1
+
+    def apply_ability(self, loss, roll):
+        if roll >= 12:
+            print("Sneak Attack! Applying gradient boost...")
+            return loss * (1 + 0.2 * self.sneak_attack_dice)
+        return loss
+
+class ExperienceSystem:
+    """Manages experience points and leveling"""
+    def __init__(self, base_xp=1000, xp_scaling=1.5):
+        self.base_xp = base_xp
+        self.xp_scaling = xp_scaling
+        self.current_xp = 0
+        self.level = 1
+        self.xp_to_next_level = self.base_xp
+
+    def add_xp(self, amount):
+        """Add experience points and handle leveling up"""
+        self.current_xp += amount
+        while self.current_xp >= self.xp_to_next_level:
+            self.level_up()
+
+    def level_up(self):
+        """Handle level up logic"""
+        self.level += 1
+        self.current_xp -= self.xp_to_next_level
+        self.xp_to_next_level = int(self.base_xp * (self.xp_scaling ** (self.level - 1)))
+        print(f"Level Up! Now level {self.level}")
+
+    def get_level_bonus(self):
+        """Get training bonus based on level"""
+        return 0.1 * (self.level - 1)  # 10% bonus per level
+
 # D&D Trainer Class
 class RollToTrain:
     """Main trainer class"""
     def __init__(self, model, tokenizer, optimizer, lr_scheduler, intelligence=10, dc=15,
-                 accumulation_steps=64, mode="per_mini_batch", num_epochs=3):
+                 accumulation_steps=64, mode="per_mini_batch", num_epochs=3,
+                 dice_type="d20", advantage=False, disadvantage=False,
+                 character_class=None, use_xp_system=True):
         if not isinstance(model, torch.nn.Module):
             raise TypeError("model must be a PyTorch module")
         if not isinstance(optimizer, torch.optim.Optimizer):
@@ -33,6 +99,10 @@ class RollToTrain:
             raise ValueError("mode must be either 'per_mini_batch' or 'per_accumulation_step'")
         if num_epochs < 1:
             raise ValueError("num_epochs must be positive")
+        if dice_type not in ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]:
+            raise ValueError("dice_type must be one of: d4, d6, d8, d10, d12, d20, d100")
+        if advantage and disadvantage:
+            raise ValueError("Cannot have both advantage and disadvantage")
 
         self.model = model.to(device)
         self.tokenizer = tokenizer
@@ -53,10 +123,29 @@ class RollToTrain:
         self._mode = mode
         self.epoch = 0
         self.epochs = num_epochs
+        self.dice_type = dice_type
+        self.advantage = advantage
+        self.disadvantage = disadvantage
+        self.dice_sides = int(dice_type[1:])
+        self.character_class = character_class
+        self.use_xp_system = use_xp_system
+        if use_xp_system:
+            self.xp_system = ExperienceSystem()
 
-    def roll_d20(self):
-        """Roll a D20 dice on the GPU."""
-        return torch.randint(1, 21, (1,), device=device).item() + self.intelligence_modifier
+    def roll_dice(self):
+        """Roll dice with optional advantage/disadvantage."""
+        if self.advantage:
+            roll1 = torch.randint(1, self.dice_sides + 1, (1,), device=device).item()
+            roll2 = torch.randint(1, self.dice_sides + 1, (1,), device=device).item()
+            roll = max(roll1, roll2)
+        elif self.disadvantage:
+            roll1 = torch.randint(1, self.dice_sides + 1, (1,), device=device).item()
+            roll2 = torch.randint(1, self.dice_sides + 1, (1,), device=device).item()
+            roll = min(roll1, roll2)
+        else:
+            roll = torch.randint(1, self.dice_sides + 1, (1,), device=device).item()
+        
+        return roll + self.intelligence_modifier
 
     def get_scale_factor(self, roll):
         """Compute the scaling factor based on the roll result."""
@@ -64,7 +153,7 @@ class RollToTrain:
         if roll == 1:
             print("Critical Fail! Inverse loss applied!")
             scale = -1.0
-        elif roll == 20:
+        elif roll == self.dice_sides:
             print("Critical Success! Applying full loss.")
             scale = 1.0
         elif roll >= self.dc:
@@ -78,12 +167,20 @@ class RollToTrain:
     def weight_update(self, loss):
         """Accumulate gradients and perform an update after the accumulation steps."""
         self._grad_accum_counter += 1
-        roll = self.roll_d20()
+        roll = self.roll_dice()
         scale = self.get_scale_factor(roll)
 
         with autocast():
             if self._mode == 'per_mini_batch':
                 loss = loss * scale
+                if self.character_class:
+                    loss = self.character_class.apply_ability(loss, roll)
+                if self.use_xp_system:
+                    level_bonus = self.xp_system.get_level_bonus()
+                    loss = loss * (1 + level_bonus)
+                    # Award XP based on roll success
+                    if roll >= self.dc:
+                        self.xp_system.add_xp(int(roll * 10))
                 self._modified_loss_history.append(loss.item())
             self.scaler.scale(loss).backward()
 
@@ -204,7 +301,14 @@ class RollToTrain:
             'eval_loss_history': self._eval_loss_history,
             'intelligence': self.intelligence,
             'dc': self.dc,
-            'mode': self._mode
+            'mode': self._mode,
+            'dice_type': self.dice_type,
+            'advantage': self.advantage,
+            'disadvantage': self.disadvantage,
+            'dice_sides': self.dice_sides,
+            'character_class': self.character_class.__class__.__name__ if self.character_class else None,
+            'use_xp_system': self.use_xp_system,
+            'xp_system': self.xp_system.__dict__ if self.use_xp_system else None
         }
         torch.save(checkpoint, path)
         print(f"Saved checkpoint to {path}")
@@ -223,4 +327,12 @@ class RollToTrain:
         self.intelligence = checkpoint['intelligence']
         self.dc = checkpoint['dc']
         self._mode = checkpoint['mode']
+        self.dice_type = checkpoint['dice_type']
+        self.advantage = checkpoint['advantage']
+        self.disadvantage = checkpoint['disadvantage']
+        self.dice_sides = checkpoint['dice_sides']
+        self.use_xp_system = checkpoint['use_xp_system']
+        if self.use_xp_system:
+            self.xp_system = ExperienceSystem()
+            self.xp_system.__dict__.update(checkpoint['xp_system'])
         print(f"Loaded checkpoint from {path}")

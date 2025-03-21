@@ -5,7 +5,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from datasets import load_dataset
-from roll_to_train import RollToTrain
+from roll_to_train import RollToTrain, Wizard, Rogue
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a model using Roll-to-Train approach')
@@ -25,7 +25,27 @@ def parse_args():
                       help='Number of gradient accumulation steps')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints',
                       help='Directory to save checkpoints')
+    parser.add_argument('--dice_type', type=str, default='d20',
+                      choices=['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'],
+                      help='Type of dice to use')
+    parser.add_argument('--advantage', action='store_true',
+                      help='Use advantage on dice rolls')
+    parser.add_argument('--disadvantage', action='store_true',
+                      help='Use disadvantage on dice rolls')
+    parser.add_argument('--character_class', type=str, default=None,
+                      choices=['wizard', 'rogue'],
+                      help='Character class to use')
+    parser.add_argument('--use_xp_system', action='store_true',
+                      help='Enable experience points and leveling system')
     return parser.parse_args()
+
+def get_character_class(class_name, level=1):
+    """Get character class instance based on name"""
+    if class_name == 'wizard':
+        return Wizard(level)
+    elif class_name == 'rogue':
+        return Rogue(level)
+    return None
 
 def main():
     args = parse_args()
@@ -51,6 +71,9 @@ def main():
         optimizer = AdamW(model.parameters(), lr=args.learning_rate)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
         
+        # Get character class if specified
+        character_class = get_character_class(args.character_class)
+        
         # Train with per_mini_batch mode
         print("\nTraining with per_mini_batch mode...")
         trainer = RollToTrain(
@@ -62,7 +85,12 @@ def main():
             dc=args.dc,
             accumulation_steps=args.accumulation_steps,
             mode="per_mini_batch",
-            num_epochs=args.num_epochs
+            num_epochs=args.num_epochs,
+            dice_type=args.dice_type,
+            advantage=args.advantage,
+            disadvantage=args.disadvantage,
+            character_class=character_class,
+            use_xp_system=args.use_xp_system
         )
         trainer.train(dataloader, val_dataloader)
         trainer.save_checkpoint(checkpoint_dir / "per_mini_batch_checkpoint.pt")
@@ -78,7 +106,12 @@ def main():
             dc=args.dc,
             accumulation_steps=args.accumulation_steps,
             mode="per_accumulation_step",
-            num_epochs=args.num_epochs
+            num_epochs=args.num_epochs,
+            dice_type=args.dice_type,
+            advantage=args.advantage,
+            disadvantage=args.disadvantage,
+            character_class=character_class,
+            use_xp_system=args.use_xp_system
         )
         trainer.train(dataloader, val_dataloader)
         trainer.save_checkpoint(checkpoint_dir / "per_accumulation_step_checkpoint.pt")
