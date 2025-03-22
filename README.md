@@ -1,7 +1,7 @@
 # 🎲 Roll-to-Train: Where D&D Meets Deep Learning
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Status](https://img.shields.io/badge/Status-Experimental-orange.svg)](https://github.com/yourusername/roll-to-train)
 
@@ -81,7 +81,7 @@ For detailed documentation, visit our [Wiki](https://github.com/yourusername/rol
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
