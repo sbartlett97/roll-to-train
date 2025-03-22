@@ -50,7 +50,7 @@ def main():
     
     # Initialize optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=2e-5)
-    scheduler = LinearLR(optimizer, start_factor=1.0, end_factor=0.1, total_iters=3)
+    scheduler = LinearLR(optimizer, step_size=1, gamma=0.1)  # Reduce LR by 0.1 each epoch
     
     # Initialize trainer with a Wizard character class
     trainer = RollToTrain(
