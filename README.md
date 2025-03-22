@@ -1,3 +1,100 @@
+# 🎲 Roll-to-Train: Where D&D Meets Deep Learning
+
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Status](https://img.shields.io/badge/Status-Experimental-orange.svg)](https://github.com/yourusername/roll-to-train)
+
+> 🎯 **Transform your ML training into an epic adventure!** Roll-to-Train brings the excitement of tabletop RPGs to machine learning, making model training more engaging and potentially more robust.
+
+## 🌟 Features
+
+- 🎲 **D&D-Inspired Mechanics**: Roll for success, critical hits, and saving throws during training
+- 🧙‍♂️ **Character Classes**: Choose your training style with Wizard, Rogue, and more
+- 🐉 **Monster Encounters**: Face off against Gradient Ooze, Loss Dragon, and Weight Wraith
+- 📈 **Experience System**: Level up your training process
+- 🔄 **Flexible Integration**: Works with PyTorch and HuggingFace transformers
+- 📊 **Visual Analytics**: Track your training progress with detailed loss plots
+
+## 🚀 Quick Start
+
+```python
+from roll_to_train import RollToTrain, Wizard, ExperienceSystem
+
+# Initialize your model, optimizer, and scheduler
+model = YourTransformerModel()
+optimizer = torch.optim.AdamW(model.parameters())
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1000)
+
+# Create your trainer with RPG mechanics
+trainer = RollToTrain(
+    model=model,
+    optimizer=optimizer,
+    scheduler=scheduler,
+    intelligence=15,  # Your model's intelligence stat
+    character_class=Wizard(level=1),  # Choose your class
+    use_xp_system=True
+)
+
+# Train your model
+trainer.train(train_dataloader, eval_dataloader)
+```
+
+## 🎮 How It Works
+
+### Core Mechanics
+
+1. **Dice Rolls**: Each weight update is determined by rolling virtual dice (d20 by default)
+   - 🎯 **Critical Success (20)**: Full loss application
+   - 💥 **Critical Failure (1)**: Inverse loss application
+   - ⚔️ **Success (≥15)**: Scaled positive update
+   - 🛡️ **Failure (<15)**: Scaled negative update
+
+2. **Character Classes**
+   - 🧙‍♂️ **Wizard**: Manipulates learning rates with arcane abilities
+   - 🗡️ **Rogue**: Applies gradient boosts with sneak attacks
+   - (More classes coming soon!)
+
+3. **Monster Encounters**
+   - 🐉 **Loss Dragon**: Increases loss values
+   - 🦠 **Gradient Ooze**: Slows down updates
+   - 👻 **Weight Wraith**: Affects model weights
+
+## 📈 Results
+
+Check out our [experiments](experiments/) directory for detailed results and comparisons with traditional training methods.
+
+## 🤝 Contributing
+
+We welcome contributions! Whether you want to:
+- Add new character classes
+- Create new monsters
+- Implement additional RPG mechanics
+- Improve documentation
+- Fix bugs
+
+Please check out our [Contributing Guidelines](CONTRIBUTING.md) to get started.
+
+## 📚 Documentation
+
+For detailed documentation, visit our [Wiki](https://github.com/yourusername/roll-to-train/wiki).
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Inspired by D&D 5e mechanics
+- Built on PyTorch and HuggingFace transformers
+- Special thanks to all contributors and supporters
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by the Roll-to-Train team</sub>
+</div>
+
 # **Roll-to-Train: A Gamified Approach to Machine Learning Training**
 
 *Roll-to-Train* is a novel, experimental, method for training transformer models that integrates mechanics inspired by tabletop role-playing games (RPGs), 
