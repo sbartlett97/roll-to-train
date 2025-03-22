@@ -4,7 +4,8 @@ using dice-roll mechanics from TTRPGs like Dungeons & Dragons."""
 
 import torch
 from torch.nn.utils import clip_grad_norm_
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
+from torch.amp import autocast
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -264,7 +265,7 @@ class RollToTrain:
         roll = self.roll_dice()
         scale = self.get_scale_factor(roll)
 
-        with autocast():
+        with autocast('cuda'):
             if self._mode == 'per_mini_batch':
                 loss = loss * scale
                 
@@ -324,7 +325,7 @@ class RollToTrain:
                                         return_tensors="pt", max_length=512).to(device)
                 labels = batch["label"].to(device)
 
-                with autocast():
+                with autocast('cuda'):
                     outputs = self.model(**inputs, labels=labels)
                     loss = outputs.loss
 
@@ -362,35 +363,60 @@ class RollToTrain:
         print(f"Evaluation Loss: {avg_loss:.4f}")
 
     def plot_loss(self, steps):
-        """Plot and save the training and evaluation loss."""
-        fig, axes = plt.subplots(3, 1, figsize=(10, 20), sharex=True)
+        """Plot and save the training and evaluation loss histories.
+        
+        Args:
+            steps (int): Number of training steps per epoch
+        """
+        # Create figure with subplots
+        fig, axes = plt.subplots(3, 1, figsize=(12, 18))
+        fig.suptitle('Training Progress', fontsize=16, y=0.95)
 
-        # Loss Before Roll
-        axes[0].plot(self._loss_history, color='blue', linestyle='--', marker='o')
-        axes[0].set_title('Loss Before Roll')
-        axes[0].set_ylabel('Loss')
-        axes[0].grid(True, linestyle='--', alpha=0.7)
+        # Common styling
+        plot_styles = {
+            'alpha': 0.8,
+            'linewidth': 1.5,
+            'markersize': 4
+        }
+        
+        # Plot loss before roll
+        x_pre = range(len(self._loss_history))
+        axes[0].plot(x_pre, self._loss_history, color='royalblue', 
+                    linestyle='--', marker='o', label='Pre-Roll Loss', **plot_styles)
+        axes[0].set_title('Loss Before Roll Application', pad=10)
+        axes[0].set_ylabel('Loss Value')
+        axes[0].legend()
+        axes[0].grid(True, linestyle=':', alpha=0.6)
 
-        # Loss After Roll
-        modified_loss_steps = [i for i in range(steps*self.epochs)] if self._mode == "per_mini_batch" else [i for i in range(0, steps*self.epochs,
-                                                                                                        self.accumulation_steps)]
-        axes[1].plot(modified_loss_steps, self._modified_loss_history, color='green', linestyle='-', marker='x')
-        axes[1].set_title('Loss After Roll')
-        axes[1].set_ylabel('Loss')
-        axes[1].grid(True, linestyle='--', alpha=0.7)
+        # Plot modified loss after roll
+        if self._mode == "per_mini_batch":
+            x_post = range(steps * self.epochs)
+        else:
+            x_post = range(0, steps * self.epochs, self.accumulation_steps)
+            
+        axes[1].plot(x_post, self._modified_loss_history, color='forestgreen',
+                    linestyle='-', marker='x', label='Post-Roll Loss', **plot_styles)
+        axes[1].set_title('Loss After Roll Application', pad=10)
+        axes[1].set_ylabel('Loss Value') 
+        axes[1].legend()
+        axes[1].grid(True, linestyle=':', alpha=0.6)
 
-        # Evaluation Loss
-        eval_steps = [i for i in range(0, steps*self.epochs, steps)]
-        axes[2].plot(eval_steps, self._eval_loss_history, color='red', linestyle='-', marker='s')
-        axes[2].set_title('Evaluation Loss')
+        # Plot evaluation loss
+        x_eval = range(0, steps * self.epochs, steps)
+        axes[2].plot(x_eval, self._eval_loss_history, color='crimson',
+                    linestyle='-', marker='s', label='Validation Loss', **plot_styles)
+        axes[2].set_title('Evaluation Loss', pad=10)
         axes[2].set_xlabel('Training Steps')
-        axes[2].set_ylabel('Loss')
-        axes[2].grid(True, linestyle='--', alpha=0.7)
+        axes[2].set_ylabel('Loss Value')
+        axes[2].legend()
+        axes[2].grid(True, linestyle=':', alpha=0.6)
 
-        # Save the figure
+        # Adjust layout and save
         plt.tight_layout()
-        plt.savefig(f"{self._mode}_roll_to_train_loss_subplots.png")
-        print(f"Saved loss plots as '{self._mode}_roll_to_train_loss_subplots.png'")
+        filename = f"{self._mode}_roll_to_train_loss.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Loss plots saved as '{filename}'")
 
     def save_checkpoint(self, path):
         """Save a checkpoint of the model and training state."""
