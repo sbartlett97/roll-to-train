@@ -8,10 +8,11 @@ from torch.cuda.amp import GradScaler
 from torch.amp import autocast
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import sys
 
 # Device setup
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+tqdm.write(f"Using device: {device}")
 
 class CharacterClass:
     """Base class for character classes"""
@@ -19,6 +20,7 @@ class CharacterClass:
         self.name = name
         self.level = level
         self.abilities = []
+        self.pbar = None
 
     def apply_ability(self, loss, roll):
         """Apply class-specific abilities to the training process"""
@@ -33,7 +35,7 @@ class Wizard(CharacterClass):
 
     def apply_ability(self, loss, roll):
         if roll >= 15 and self.arcane_recovery_charges > 0:
-            print("Arcane Recovery! Adjusting learning rate...")
+            tqdm.write("Arcane Recovery! Adjusting learning rate...")
             self.arcane_recovery_charges -= 1
             return loss * 1.5  # Increase learning rate temporarily
         return loss
@@ -47,7 +49,7 @@ class Rogue(CharacterClass):
 
     def apply_ability(self, loss, roll):
         if roll >= 12:
-            print("Sneak Attack! Applying gradient boost...")
+            tqdm.write("Sneak Attack! Applying gradient boost...")
             return loss * (1 + 0.2 * self.sneak_attack_dice)
         return loss
 
@@ -59,6 +61,7 @@ class ExperienceSystem:
         self.current_xp = 0
         self.level = 1
         self.xp_to_next_level = self.base_xp
+        self.pbar = None
 
     def add_xp(self, amount):
         """Add experience points and handle leveling up"""
@@ -71,7 +74,7 @@ class ExperienceSystem:
         self.level += 1
         self.current_xp -= self.xp_to_next_level
         self.xp_to_next_level = int(self.base_xp * (self.xp_scaling ** (self.level - 1)))
-        print(f"Level Up! Now level {self.level}")
+        tqdm.write(f"Level Up! Now level {self.level}")
 
     def get_level_bonus(self):
         """Get training bonus based on level"""
@@ -79,12 +82,13 @@ class ExperienceSystem:
 
 class Monster:
     """Base class for training monsters"""
-    def __init__(self, name, difficulty_class, hp, abilities=None):
+    def __init__(self, name, hp, abilities=None, dc=None):
         self.name = name
-        self.dc = difficulty_class
+        self.dc = dc
         self.hp = hp
         self.abilities = abilities or []
         self.current_hp = hp
+        self.pbar = None
 
     def apply_effect(self, loss, roll):
         """Apply monster's effect to the training process"""
@@ -98,7 +102,7 @@ class GradientOoze(Monster):
 
     def apply_effect(self, loss, roll):
         if roll < self.dc:
-            print("Gradient Ooze's Slime Trail is slowing down your updates!")
+            tqdm.write("Gradient Ooze's Slime Trail is slowing down your updates!")
             return loss * 0.5  # Reduce learning rate temporarily
         return loss
 
@@ -110,7 +114,7 @@ class LossDragon(Monster):
 
     def apply_effect(self, loss, roll):
         if roll < self.dc:
-            print("Loss Dragon's breath is increasing your loss!")
+            tqdm.write("Loss Dragon's breath is increasing your loss!")
             return loss * 2.0  # Double the loss temporarily
         return loss
 
@@ -122,7 +126,7 @@ class WeightWraith(Monster):
 
     def apply_effect(self, loss, roll):
         if roll < self.dc:
-            print("Weight Wraith is draining your model's strength!")
+            tqdm.write("Weight Wraith is draining your model's strength!")
             return loss * 1.5  # Increase loss and affect weight updates
         return loss
 
@@ -138,6 +142,7 @@ class MonsterEncounter:
         self.active_monster = None
         self.encounter_steps = 0
         self.max_encounter_steps = 3  # Monster stays for 3 steps
+        self.pbar = None
 
     def roll_encounter(self):
         """Determine if a monster encounter should occur"""
@@ -152,7 +157,7 @@ class MonsterEncounter:
         if self.active_monster is None and self.roll_encounter():
             self.active_monster = self.get_random_monster()
             self.encounter_steps = 0
-            print(f"\nA {self.active_monster.name} appears!")
+            tqdm.write(f"\nA {self.active_monster.name} appears!")
             return True
         return False
 
@@ -163,7 +168,7 @@ class MonsterEncounter:
             loss = self.active_monster.apply_effect(loss, roll)
             
             if self.encounter_steps >= self.max_encounter_steps:
-                print(f"\nThe {self.active_monster.name} retreats!")
+                tqdm.write(f"\nThe {self.active_monster.name} retreats!")
                 self.active_monster = None
                 self.encounter_steps = 0
             
@@ -181,8 +186,6 @@ class RollToTrain:
             raise TypeError("model must be a PyTorch module")
         if not isinstance(optimizer, torch.optim.Optimizer):
             raise TypeError("optimizer must be a PyTorch optimizer")
-        if not isinstance(lr_scheduler, torch.optim.lr_scheduler._LRScheduler):
-            raise TypeError("lr_scheduler must be a PyTorch learning rate scheduler")
         if not 1 <= intelligence <= 20:
             raise ValueError("intelligence must be between 1 and 20")
         if not 1 <= dc <= 30:
@@ -226,6 +229,11 @@ class RollToTrain:
         if use_xp_system:
             self.xp_system = ExperienceSystem()
         self.monster_encounter = MonsterEncounter(encounter_chance)
+        
+        # Progress bars
+        self.pbar = None
+        self.roll_pbar = None
+        self.encounter_pbar = None
 
     def roll_dice(self):
         """Roll dice with optional advantage/disadvantage."""
@@ -246,17 +254,17 @@ class RollToTrain:
         """Compute the scaling factor based on the roll result."""
         scale = torch.zeros(1, device=device)
         if roll == 1:
-            print("Critical Fail! Inverse loss applied!")
+            tqdm.write("Critical Fail! Inverse loss applied!")
             scale = -1.0
         elif roll == self.dice_sides:
-            print("Critical Success! Applying full loss.")
+            tqdm.write("Critical Success! Applying full loss.")
             scale = 1.0
         elif roll >= self.dc:
             scale = 1 * ((roll - self.dc) / 100)
-            print(f"Success! Scaling loss by {scale:.2f}.")
+            tqdm.write(f"Success! Scaling loss by {scale:.2f}.")
         else:
             scale = 0.0
-            print("Fail! No update applied")
+            tqdm.write("Fail! No update applied")
         return scale
 
     def weight_update(self, loss):
@@ -292,7 +300,7 @@ class RollToTrain:
         self._accumulated_loss += loss.item()
 
         if self._grad_accum_counter >= self.accumulation_steps:
-            print("Performing optimizer step after gradient accumulation")
+            tqdm.write("Performing optimizer step after gradient accumulation")
             self._loss_history.append(self._accumulated_loss / self.accumulation_steps)
             if self._mode == 'per_accumulation_step':
                 for param in self.model.parameters():
@@ -314,10 +322,12 @@ class RollToTrain:
         self.epoch = 0
 
         while self.epoch < self.epochs:
-            print(f"\nEpoch {self.epoch + 1}/{self.epochs}")
-            progress_bar = tqdm(train_dataloader, desc="Training")
+            tqdm.write(f"\nEpoch {self.epoch + 1}/{self.epochs}")
             
-            for batch_idx, batch in enumerate(progress_bar):
+            # Main training progress bar
+            self.pbar = tqdm(train_dataloader, desc="Training", position=0, leave=True)
+            
+            for batch_idx, batch in enumerate(self.pbar):
                 if self.model.eval:
                     self.model.train()
 
@@ -332,7 +342,7 @@ class RollToTrain:
                 self.weight_update(loss)
                 
                 # Update progress bar
-                progress_bar.set_postfix({
+                self.pbar.set_postfix({
                     'loss': f'{loss.item():.4f}',
                     'lr': f'{self.optimizer.param_groups[0]["lr"]:.2e}'
                 })
@@ -343,31 +353,40 @@ class RollToTrain:
             self.evaluate(eval_dataloader)
             self.lr_scheduler.step()
             self.epoch += 1
+            
+            # Close progress bars
+            if self.pbar:
+                self.pbar.close()
+        
         self.plot_loss(len(train_dataloader))
 
     def evaluate(self, eval_dataloader):
         """Evaluate the model on the validation set."""
         self.model.eval()
         total_loss = 0
+        
+        # Create evaluation progress bar
+        eval_pbar = tqdm(eval_dataloader, desc="Evaluating", position=1, leave=True)
+        
         with torch.no_grad():
-            for val_batch in eval_dataloader:
+            for val_batch in eval_pbar:
                 inputs = self.tokenizer(val_batch["text"], padding=True, truncation=True,
                                         return_tensors="pt", max_length=512).to(device)
                 labels = val_batch["label"].to(device)
 
                 outputs = self.model(**inputs, labels=labels)
                 total_loss += outputs.loss.item()
+                
+                # Update evaluation progress bar
+                eval_pbar.set_postfix({'loss': f'{outputs.loss.item():.4f}'})
 
+        eval_pbar.close()
         avg_loss = total_loss / len(eval_dataloader)
         self._eval_loss_history.append(avg_loss)
-        print(f"Evaluation Loss: {avg_loss:.4f}")
+        tqdm.write(f"Evaluation Loss: {avg_loss:.4f}")
 
     def plot_loss(self, steps):
-        """Plot and save the training and evaluation loss histories.
-        
-        Args:
-            steps (int): Number of training steps per epoch
-        """
+        """Plot and save the training and evaluation loss histories."""
         # Create figure with subplots
         fig, axes = plt.subplots(3, 1, figsize=(12, 18))
         fig.suptitle('Training Progress', fontsize=16, y=0.95)
@@ -416,7 +435,7 @@ class RollToTrain:
         filename = f"{self._mode}_roll_to_train_loss.png"
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"Loss plots saved as '{filename}'")
+        tqdm.write(f"Loss plots saved as '{filename}'")
 
     def save_checkpoint(self, path):
         """Save a checkpoint of the model and training state."""
@@ -446,7 +465,7 @@ class RollToTrain:
             }
         }
         torch.save(checkpoint, path)
-        print(f"Saved checkpoint to {path}")
+        tqdm.write(f"Saved checkpoint to {path}")
 
     def load_checkpoint(self, path):
         """Load a checkpoint of the model and training state."""
@@ -476,4 +495,4 @@ class RollToTrain:
             monster_class = globals()[monster_data['active_monster']]
             self.monster_encounter.active_monster = monster_class()
             self.monster_encounter.encounter_steps = monster_data.get('encounter_steps', 0)
-        print(f"Loaded checkpoint from {path}")
+        tqdm.write(f"Loaded checkpoint from {path}")
