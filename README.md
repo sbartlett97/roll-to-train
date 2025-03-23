@@ -53,7 +53,21 @@ trainer.train(train_dataloader, eval_dataloader)
 2. **Character Classes**
    - 🧙‍♂️ **Wizard**: Manipulates learning rates with arcane abilities
    - 🗡️ **Rogue**: Applies gradient boosts with sneak attacks
-   - (More classes coming soon!)
+   - ⚔️ **Fighter**: Provides consistent training with Second Wind and Action Surge
+   - 🙏 **Cleric**: Stabilizes training with healing and divine intervention
+   - 💢 **Barbarian**: Aggressive training with Rage and Reckless Attack
+   - ✨ **Paladin**: Balanced approach with Aura of Protection and Divine Smite
+
+Each class offers unique training dynamics:
+
+| Class | Specialization | Key Abilities | Best For |
+|-------|---------------|--------------|-----------|
+| Wizard | Learning rate control | Arcane Recovery, Spell Mastery | Fine-tuning |
+| Rogue | Gradient manipulation | Sneak Attack, Cunning Action | Precise updates |
+| Fighter | Consistency | Second Wind, Action Surge | Stable training |
+| Cleric | Recovery & stability | Divine Intervention, Healing Word | Difficult models |
+| Barbarian | Aggressive updates | Rage, Reckless Attack | Escaping local minima |
+| Paladin | Balanced performance | Divine Smite, Aura of Protection | General training |
 
 3. **Monster Encounters**
    - 🐉 **Loss Dragon**: Increases loss values
