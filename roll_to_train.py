@@ -175,6 +175,103 @@ class MonsterEncounter:
             return loss
         return loss
 
+class Fighter(CharacterClass):
+    """Fighter class - specializes in consistent training performance"""
+    def __init__(self, level=1):
+        super().__init__("Fighter", level)
+        self.abilities = ["Second Wind", "Action Surge"]
+        self.second_wind_charges = 2
+        self.action_surge_charges = 1
+
+    def apply_ability(self, loss, roll):
+        if roll < 10 and self.second_wind_charges > 0:
+            # Second Wind: Recover from bad rolls
+            tqdm.write("Second Wind! Converting bad roll to moderate success...")
+            self.second_wind_charges -= 1
+            return loss * 0.5  # Convert potential negative update to small positive one
+        elif roll >= 18 and self.action_surge_charges > 0:
+            # Action Surge: Double the effect of great rolls
+            tqdm.write("Action Surge! Doubling the effectiveness...")
+            self.action_surge_charges -= 1
+            return loss * 2.0
+        return loss
+
+class Cleric(CharacterClass):
+    """Cleric class - specializes in recovery and stability"""
+    def __init__(self, level=1):
+        super().__init__("Cleric", level)
+        self.abilities = ["Divine Intervention", "Healing Word"]
+        self.healing_charges = 3
+        self.last_loss = None
+
+    def apply_ability(self, loss, roll):
+        if self.last_loss is not None and loss > self.last_loss * 1.5 and self.healing_charges > 0:
+            # Healing Word: Reduce sudden loss spikes
+            tqdm.write("Healing Word! Stabilizing sudden loss increase...")
+            self.healing_charges -= 1
+            loss = self.last_loss * 1.1  # Only allow 10% loss increase
+        
+        if roll == 1 and torch.rand(1).item() < 0.1:  # 10% chance on critical fail
+            # Divine Intervention: Turn critical failure into success
+            tqdm.write("Divine Intervention! Converting critical failure to success...")
+            return loss * 0.5  # Convert negative update to positive one
+        
+        self.last_loss = loss
+        return loss
+
+class Barbarian(CharacterClass):
+    """Barbarian class - specializes in aggressive training"""
+    def __init__(self, level=1):
+        super().__init__("Barbarian", level)
+        self.abilities = ["Rage", "Reckless Attack"]
+        self.is_raging = False
+        self.rage_rounds = 0
+        self.max_rage_rounds = 3
+
+    def apply_ability(self, loss, roll):
+        # Start rage on high rolls
+        if roll >= 16 and not self.is_raging:
+            tqdm.write("Rage activated! Increasing learning intensity...")
+            self.is_raging = True
+            self.rage_rounds = 0
+
+        if self.is_raging:
+            self.rage_rounds += 1
+            loss = loss * 1.5  # More aggressive updates during rage
+            
+            if self.rage_rounds >= self.max_rage_rounds:
+                tqdm.write("Rage ends...")
+                self.is_raging = False
+                self.rage_rounds = 0
+        
+        if roll >= 18:  # Reckless Attack
+            tqdm.write("Reckless Attack! High risk, high reward update...")
+            return loss * 2.0  # Double the update but increases risk
+            
+        return loss
+
+class Paladin(CharacterClass):
+    """Paladin class - specializes in consistent performance and smiting bad results"""
+    def __init__(self, level=1):
+        super().__init__("Paladin", level)
+        self.abilities = ["Divine Smite", "Aura of Protection"]
+        self.smite_charges = 3
+        self.aura_active = True
+
+    def apply_ability(self, loss, roll):
+        # Aura of Protection: Minimum roll threshold
+        if self.aura_active and roll < 8:
+            tqdm.write("Aura of Protection! Improving low roll...")
+            roll = 8  # Establish a minimum effectiveness
+        
+        # Divine Smite: Powerful burst on high rolls
+        if roll >= 15 and self.smite_charges > 0:
+            tqdm.write("Divine Smite! Enhancing successful update...")
+            self.smite_charges -= 1
+            return loss * (1.5 + (roll - 15) * 0.1)  # Scales with roll quality
+            
+        return loss
+
 # D&D Trainer Class
 class RollToTrain:
     """Main trainer class"""
